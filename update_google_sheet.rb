@@ -17,11 +17,7 @@ INPUT_FILE = ARGV[0]
 PARTNER_OVERRIDE = ARGV[1]
 
 # Config
-CREDENTIALS_PATH = File.expand_path("~/.openclaw/credentials/google-sheets-service-account.json")
-MDBEXPORT = "mdb-export"
-TEMPLATE_SHEET_ID = "1KGxQ7LJjqxPg6ub19YRU7vtcWlfu7bFWXmSfcxqlXYg"  # Sessions with GoonClaw
-TEMPLATE_TAB_NAME = "Template"  # Tab to duplicate
-TEMPLATE_MAX_ROW = 26
+eval(File.read('./env.rb'))
 
 # Step 1: Run the CSV generator to get partner name and CSV data
 puts "Step 1: Generating CSV from Input file..."
@@ -39,7 +35,7 @@ end
 csv_data = `#{cmd} 2>&1`
 unless $?.success?
   puts "Error running CSV generator:"
-  puts output
+  puts csv_data
   exit 1
 end
 
@@ -102,7 +98,7 @@ service.authorization = Google::Auth::ServiceAccountCredentials.make_creds(
 )
 
 # Step 4: Get template sheet info
-puts "\nStep 4: Reading template sheet..."
+puts "\nStep 4: Reading template sheet #{TEMPLATE_SHEET_ID}..."
 spreadsheet = service.get_spreadsheet(TEMPLATE_SHEET_ID)
 template_sheet = spreadsheet.sheets.find { |s| s.properties.title == TEMPLATE_TAB_NAME }
 

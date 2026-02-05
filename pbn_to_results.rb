@@ -28,7 +28,7 @@ LEFT_OF    = { 'N' => 'E', 'E' => 'S', 'S' => 'W', 'W' => 'N' }.freeze
 board_blocks = content.split(/(?=^\[Event\s)/m).select { |b| b.include?('[Board ') }
 
 csv = CSV.new($stdout)
-csv << ['Board', 'Dir', 'Contract', 'Score', '% vs Field', '% vs Club'
+csv << ['Board', 'Dir', 'Contract', 'Score', '% vs Field', '% vs Club',
         '1st Bidder', 'Leader', 'Declarer', 'Vul', 'Lead', 'Bidding', 'Postmortem']
 
 board_blocks.each do |block|

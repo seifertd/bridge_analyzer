@@ -74,6 +74,7 @@ board_blocks.each do |block|
   ns_score  = %w[N S].include?(declarer_dir) ? raw_score : -raw_score
   field_pct = nil
   in_table  = false
+  table_scores = []
 
   block.each_line do |line|
     if line.include?('[InstantScoreTable')
@@ -86,13 +87,20 @@ board_blocks.each do |block|
     next if stripped.empty?
 
     if stripped =~ /^(\d+)\s+(-?\d+)\s+([\d.]+)$/
-      if $2.to_i == ns_score
-        field_pct = $3.to_f
+      entry_score = $2.to_i
+      entry_pct   = $3.to_f
+      table_scores << entry_score
+      if entry_score == ns_score
+        field_pct = entry_pct
         break
       end
     else
       break
     end
+  end
+
+  if field_pct.nil? && !table_scores.empty?
+    field_pct = ns_score > table_scores.max ? 100.0 : 0.0
   end
 
   field_pct = 100.0 - field_pct if field_pct && dir == 'EW'

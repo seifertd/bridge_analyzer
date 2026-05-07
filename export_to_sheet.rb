@@ -44,8 +44,14 @@ unless doug_entry
   exit 1
 end
 
-MY_TABLE = doug_entry['Table'].to_i
+MY_TABLE = doug_entry['Table'].to_i        # physical starting table
+MY_SECTION = doug_entry['Section'].to_i
 MY_DIRECTION = doug_entry['Direction']
+
+# Derive pair number from RoundData (physical table != pair number)
+round_data = CSV.parse(`#{MDBEXPORT} -B #{DATAFILE} RoundData`, headers: true, converters: [:numeric])
+my_round1 = round_data.find { |r| r['Section'] == MY_SECTION && r['Table'] == MY_TABLE && r['Round'] == 1 }
+MY_PAIR = ['N', 'S'].include?(MY_DIRECTION) ? my_round1['NSPair'] : my_round1['EWPair']
 
 # Determine partner direction (opposite direction in partnership)
 PARTNER_DIRECTION = case MY_DIRECTION
@@ -82,7 +88,7 @@ data = CSV.parse(`#{MDBEXPORT} -B #{DATAFILE} ReceivedData`,
 
 # Calculate bridge scoring
 def score(contract, result, vul)
-  return 0 if contract.nil? || contract.strip.empty?
+  return 0 if contract.nil? || contract.strip.empty? || contract.strip.upcase == 'PASS'
   book, suit, doubling = contract.split(" ")
   book = book.to_i
   return 0 if result.nil?
@@ -149,11 +155,15 @@ def opening_leader(declarer)
   {'N' => 'E', 'E' => 'S', 'S' => 'W', 'W' => 'N'}[declarer]
 end
 
-# Convert position to Doug/Partner/Them
-def position_to_readable(position)
+# When playing EW, the N player sits E and S player sits W (standard compass rotation)
+ROTATE = {'N' => 'E', 'E' => 'S', 'S' => 'W', 'W' => 'N'}
+MY_EW_DIRECTION      = ROTATE[MY_DIRECTION]
+PARTNER_EW_DIRECTION = ROTATE[PARTNER_DIRECTION]
+
+def position_to_readable(position, my_compass, partner_compass)
   case position
-  when MY_DIRECTION then 'Doug'
-  when PARTNER_DIRECTION then PARTNER_NAME
+  when my_compass      then 'Doug'
+  when partner_compass then PARTNER_NAME
   else 'Them'
   end
 end
@@ -186,8 +196,8 @@ def calc_mp_scores(data, board)
   mp_by_row
 end
 
-# Get my boards
-my_boards = data.find_all { |r| r['Table'] == MY_TABLE }
+# Get my boards by pair number
+my_boards = data.find_all { |r| r['PairNS'] == MY_PAIR || r['PairEW'] == MY_PAIR }
 
 # Build output CSV
 output = []
@@ -198,7 +208,7 @@ boards_played.each do |board_num|
   my_result = my_boards.find { |r| r['Board'] == board_num }
   
   # Determine my direction for this board
-  my_dir = my_result['PairNS'] == MY_TABLE ? 'NS' : 'EW'
+  my_dir = my_result['PairNS'] == MY_PAIR ? 'NS' : 'EW'
   
   # Calculate score from my perspective
   vul = VUL[(board_num - 1) % VUL.size]
@@ -208,10 +218,12 @@ boards_played.each do |board_num|
   my_score = ['N', 'S'].include?(dec_dir) ? raw_score : -raw_score
   my_score = -my_score if my_dir == 'EW'
   
+  passed_out = my_result['Contract'].nil? || my_result['Contract'].to_s.strip.empty? ||
+               my_result['Contract'].to_s.strip.upcase == 'PASS'
   dealer = DEALER[(board_num - 1) % DEALER.size]
-  leader = opening_leader(dec_dir)
   mp_info = mp_data[my_result]
-  
+  mp_pct = my_dir == 'EW' ? (100.0 - mp_info[:percent]).round(1) : mp_info[:percent]
+
   # Human-readable vulnerability
   vul_readable = case vul
   when 'O' then 'None'
@@ -219,31 +231,34 @@ boards_played.each do |board_num|
   when 'NS' then my_dir == 'NS' ? 'Us' : 'Them'
   when 'EW' then my_dir == 'EW' ? 'Us' : 'Them'
   end
-  
-  # Human-readable declarer
-  declarer_readable = if position_to_readable(dec_dir) == 'Them'
-    'Defense'
+
+  my_compass      = my_dir == 'NS' ? MY_DIRECTION      : MY_EW_DIRECTION
+  partner_compass = my_dir == 'NS' ? PARTNER_DIRECTION : PARTNER_EW_DIRECTION
+
+  if passed_out
+    leader_readable = ''
+    declarer_readable = ''
   else
-    position_to_readable(dec_dir)
+    leader = opening_leader(dec_dir)
+    leader_readable = position_to_readable(leader, my_compass, partner_compass)
+    dec_readable = position_to_readable(dec_dir, my_compass, partner_compass)
+    declarer_readable = dec_readable == 'Them' ? 'Defense' : dec_readable
   end
-  
-  # Convert leader to readable format
-  leader_readable = position_to_readable(leader)
-  
+
   output << {
     'Board' => board_num,
     'Dir' => my_dir,
-    'Contract' => my_result['Contract'],
+    'Contract' => passed_out ? '' : my_result['Contract'],
     'Score' => my_score,
-    '% vs Field' => mp_info[:percent],
-    '% vs Club' => mp_info[:percent],
-    '1st Bidder' => '',  # Fill in manually - first non-pass call
+    '% vs Field' => mp_pct,
+    '% vs Club' => mp_pct,
+    '1st Bidder' => '',
     'Leader' => leader_readable,
     'Declarer' => declarer_readable,
     'Vul' => vul_readable,
-    'Lead' => '',  # Fill in manually
-    'Bidding' => '',  # Fill in manually
-    'Postmortem' => ''  # Fill in manually
+    'Lead' => '',
+    'Bidding' => '',
+    'Postmortem' => ''
   }
 end
 

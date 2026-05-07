@@ -82,8 +82,10 @@ data = CSV.parse(`#{MDBEXPORT} -B #{DATAFILE} ReceivedData`,
 
 # Calculate bridge scoring
 def score(contract, result, vul)
+  return 0 if contract.nil? || contract.strip.empty?
   book, suit, doubling = contract.split(" ")
   book = book.to_i
+  return 0 if result.nil?
   result = 0 if result == '='
   
   # Doubling multiplier: undoubled=1, doubled=2, redoubled=4

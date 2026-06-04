@@ -1,16 +1,26 @@
 require 'csv'
+require_relative 'seat_map'
 
 # Command line arguments
-if ARGV.size < 1 || ARGV.size > 2
-  puts "Usage: ruby export_to_sheet.rb <BWSFILE> [PARTNER_NAME]"
+SEATS_SPEC, rest = extract_seats_flag(ARGV)
+if rest.size < 1 || rest.size > 2 || SEATS_SPEC.nil?
+  puts "Usage: ruby export_to_sheet.rb --seats <SEATS> <BWSFILE> [PARTNER_NAME]"
+  puts "  --seats: Doug's per-board seats, e.g. \"1-5:S,6-10:N,11-20:E,21-25:W\""
   puts "  BWSFILE: Path to the .BWS file"
   puts "  PARTNER_NAME: (optional) Your partner's name - overrides BWS file if provided"
   exit 1
 end
 
+begin
+  SEAT_MAP = parse_seat_map(SEATS_SPEC)
+rescue ArgumentError => e
+  puts "Error: #{e.message}"
+  exit 1
+end
+
 MDBEXPORT = "mdb-export"
-DATAFILE = ARGV[0]
-PARTNER_NAME_OVERRIDE = ARGV[1]  # May be nil
+DATAFILE = rest[0]
+PARTNER_NAME_OVERRIDE = rest[1]  # May be nil
 
 DEALER = ['N', 'E', 'S', 'W']
 VUL = ['O', 'NS', 'EW', 'B', 'NS', 'EW', 'B', 'O', 'EW', 'B', 'O', 'NS', 'B', 'O', 'NS', 'EW']
@@ -155,11 +165,6 @@ def opening_leader(declarer)
   {'N' => 'E', 'E' => 'S', 'S' => 'W', 'W' => 'N'}[declarer]
 end
 
-# When playing EW, the N player sits E and S player sits W (standard compass rotation)
-ROTATE = {'N' => 'E', 'E' => 'S', 'S' => 'W', 'W' => 'N'}
-MY_EW_DIRECTION      = ROTATE[MY_DIRECTION]
-PARTNER_EW_DIRECTION = ROTATE[PARTNER_DIRECTION]
-
 def position_to_readable(position, my_compass, partner_compass)
   case position
   when my_compass      then 'Doug'
@@ -232,8 +237,15 @@ boards_played.each do |board_num|
   when 'EW' then my_dir == 'EW' ? 'Us' : 'Them'
   end
 
-  my_compass      = my_dir == 'NS' ? MY_DIRECTION      : MY_EW_DIRECTION
-  partner_compass = my_dir == 'NS' ? PARTNER_DIRECTION : PARTNER_EW_DIRECTION
+  # Doug's true physical seat for this board comes from the seat map; the BWS
+  # only records his round-1 registration, so it can't be inferred otherwise.
+  my_compass      = seat_for_board(SEAT_MAP, board_num, 'bws')
+  partner_compass = PARTNER_OF[my_compass]
+  seat_side = %w[N S].include?(my_compass) ? 'NS' : 'EW'
+  if seat_side != my_dir
+    $stderr.puts "Warning: board #{board_num} seat #{my_compass} is #{seat_side}, " \
+                 "but Doug's pair sits #{my_dir} this round; check --seats"
+  end
 
   if passed_out
     leader_readable = ''

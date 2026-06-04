@@ -1,14 +1,24 @@
 #!/usr/bin/env ruby
 
 require 'csv'
+require_relative 'seat_map'
 
-pbn_file = ARGV[0]
-unless pbn_file
-  $stderr.puts "Usage: ruby pbn_to_results.rb <pbn_file> [<partner>]"
+seats_spec, rest = extract_seats_flag(ARGV)
+pbn_file = rest[0]
+partner_override = rest[1]
+
+unless pbn_file && seats_spec
+  $stderr.puts 'Usage: ruby pbn_to_results.rb --seats <SEATS> <pbn_file> [<partner>]'
+  $stderr.puts '  --seats: Doug\'s per-board seats, e.g. "1-5:S,6-10:N,11-20:E,21-25:W"'
   exit 1
 end
 
-partner_override = ARGV[1]
+begin
+  SEAT_MAP = parse_seat_map(seats_spec)
+rescue ArgumentError => e
+  $stderr.puts "Error: #{e.message}"
+  exit 1
+end
 
 content = File.read(pbn_file)
 
@@ -21,7 +31,6 @@ content.each_line do |line|
   end
 end
 
-PARTNER_OF = { 'N' => 'S', 'S' => 'N', 'E' => 'W', 'W' => 'E' }.freeze
 LEFT_OF    = { 'N' => 'E', 'E' => 'S', 'S' => 'W', 'W' => 'N' }.freeze
 
 # Split into board blocks (each starts with [Event)
@@ -40,16 +49,19 @@ board_blocks.each do |block|
   players = { 'N' => tags['North'], 'E' => tags['East'],
               'S' => tags['South'], 'W' => tags['West'] }
 
+  # The PBN normalizes Doug's name into a canonical seat, so use it only to
+  # confirm he played this board and to read off his partner's name. His true
+  # physical seat (which the file can't encode) comes from the seat map.
   doug_seat = players.find { |_, name| name == target_name }&.first
   next unless doug_seat
 
-  partner_seat  = PARTNER_OF[doug_seat]
-  partner_first = partner_override || players[partner_seat].split.first
+  doug_true_seat = seat_for_board(SEAT_MAP, tags['Board'], 'pbn')
+  partner_first  = partner_override || players[PARTNER_OF[doug_seat]].split.first
   if !partner_first
     puts "Error: Could not determine partner name from pbn. Provide as 2nd arg"
     exit 2
   end
-  dir           = %w[E W].include?(doug_seat) ? 'EW' : 'NS'
+  dir = %w[E W].include?(doug_true_seat) ? 'EW' : 'NS'
 
   # Contract: split into characters, N -> NT
   raw_contract = tags['Contract']
@@ -116,10 +128,10 @@ board_blocks.each do |block|
           vul == dir ? 'Us' : 'Them'
         end
 
-  # Declarer name
-  declarer_name = if declarer_dir == doug_seat
+  # Declarer name (relative to Doug's true seat, not the normalized PBN seat)
+  declarer_name = if declarer_dir == doug_true_seat
                     'Doug'
-                  elsif declarer_dir == partner_seat
+                  elsif declarer_dir == PARTNER_OF[doug_true_seat]
                     partner_first
                   else
                     'Defense'
@@ -127,9 +139,9 @@ board_blocks.each do |block|
 
   # Leader: one seat to the left of declarer
   leader_seat = LEFT_OF[declarer_dir]
-  leader_name = if leader_seat == doug_seat
+  leader_name = if leader_seat == doug_true_seat
                   'Doug'
-                elsif leader_seat == partner_seat
+                elsif leader_seat == PARTNER_OF[doug_true_seat]
                   partner_first
                 else
                   'Them'

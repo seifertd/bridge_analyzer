@@ -4,17 +4,28 @@ require 'googleauth'
 require 'csv'
 require 'date'
 require 'fileutils'
+require_relative 'seat_map'
 
 # Usage check
-if ARGV.size < 1 || ARGV.size > 2
-  puts "Usage: ruby update_google_sheet.rb <INPUTFILE> [PARTNER_NAME]"
+SEATS_SPEC, rest = extract_seats_flag(ARGV)
+if rest.size < 1 || rest.size > 2 || SEATS_SPEC.nil?
+  puts "Usage: ruby update_google_sheet.rb --seats <SEATS> <INPUTFILE> [PARTNER_NAME]"
+  puts "  --seats: Doug's per-board seats, e.g. \"1-5:S,6-10:N,11-20:E,21-25:W\""
   puts "  INPUTFILE: Path to a .BWS or .pbn file"
   puts "  PARTNER_NAME: (optional) Partner's first name - overrides BWS if provided"
   exit 1
 end
 
-INPUT_FILE = ARGV[0]
-PARTNER_OVERRIDE = ARGV[1]
+# Validate the spec up front so we fail fast before any network calls.
+begin
+  parse_seat_map(SEATS_SPEC)
+rescue ArgumentError => e
+  puts "Error: #{e.message}"
+  exit 1
+end
+
+INPUT_FILE = rest[0]
+PARTNER_OVERRIDE = rest[1]
 
 # Config
 eval(File.read('./env.rb'))
@@ -26,11 +37,8 @@ script = if INPUT_FILE.downcase.end_with?("bws")
          else
            "pbn_to_results.rb"
          end
-cmd = if PARTNER_OVERRIDE
-  "ruby #{script} \"#{INPUT_FILE}\" \"#{PARTNER_OVERRIDE}\""
-else
-  "ruby #{script} \"#{INPUT_FILE}\""
-end
+cmd = +"ruby #{script} --seats \"#{SEATS_SPEC}\" \"#{INPUT_FILE}\""
+cmd << " \"#{PARTNER_OVERRIDE}\"" if PARTNER_OVERRIDE
 
 csv_data = `#{cmd} 2>&1`
 unless $?.success?

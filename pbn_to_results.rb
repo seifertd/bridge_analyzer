@@ -63,12 +63,15 @@ board_blocks.each do |block|
   end
   dir = %w[E W].include?(doug_true_seat) ? 'EW' : 'NS'
 
-  # Contract: split into characters, N -> NT
+  # Contract: split into characters, N -> NT, then append the declarer's seat
+  # (e.g. "4SX" declared by East -> "4 S X E").
   raw_contract = tags['Contract']
   contract = if raw_contract.upcase == 'PASS'
                'PASS'
              else
-               raw_contract.chars.map { |c| c == 'N' ? 'NT' : c }.join(' ')
+               parts = raw_contract.chars.map { |c| c == 'N' ? 'NT' : c }
+               parts << tags['Declarer'] unless tags['Declarer'].to_s.empty?
+               parts.join(' ')
              end
 
   # Score: the PBN Score tag is from the declarer's perspective.

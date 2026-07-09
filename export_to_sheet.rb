@@ -260,7 +260,10 @@ boards_played.each do |board_num|
   output << {
     'Board' => board_num,
     'Dir' => my_dir,
-    'Contract' => passed_out ? '' : my_result['Contract'],
+    # Append the declarer's seat and normalize doubling to upper case, matching
+    # the PBN importer (e.g. "2 H x" by East -> "2 H X E"). score() above runs on
+    # the raw contract, so neither the seat nor the case change reaches the parser.
+    'Contract' => passed_out ? '' : "#{my_result['Contract'].upcase} #{dec_dir}",
     'Score' => my_score,
     '% vs Field' => mp_pct,
     '% vs Club' => mp_pct,

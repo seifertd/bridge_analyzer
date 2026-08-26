@@ -9,7 +9,7 @@ Used for session post mortems with my partner:
 The app authenticates via a **service account** JSON key file stored at:
 
 ```
-~/.local/share/google-sheets-service-account.json
+~/.gdrive/google-sheets-service-account.json
 ```
 
 Service account keys don't expire on their own, but if the key is revoked or lost you'll need to generate a new one:
@@ -21,7 +21,7 @@ Service account keys don't expire on their own, but if the key is revoked or los
 5. Choose **JSON** and click **Create** — this downloads a new key file.
 6. Replace the existing credentials file with the downloaded file:
    ```sh
-   mv ~/Downloads/<downloaded-key>.json ~/.local/share/google-sheets-service-account.json
+   mv ~/Downloads/<downloaded-key>.json ~/.gdrive/google-sheets-service-account.json
    ```
 7. Make sure the service account still has **Editor** access to the target Google Sheet (share the sheet with the service account's email address if needed).
 

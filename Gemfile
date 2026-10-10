@@ -5,3 +5,4 @@ source "https://rubygems.org"
 # gem "rails"
 
 gem "sheets_v4", "~> 0.10.3"
+gem "csv"
